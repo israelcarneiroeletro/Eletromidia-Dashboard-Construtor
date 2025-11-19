@@ -1,0 +1,8 @@
+{
+  "name": "Eletromidia Dashboard Builder",
+  "description": "A visual dashboard layout builder complying with Eletromidia's Design System, featuring grid snapping, multi-resolution support, and Gemini-powered layout reconstruction.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
