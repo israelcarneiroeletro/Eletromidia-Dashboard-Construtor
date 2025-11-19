@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Layout, Hash, Activity, List, BarChart, Image as ImageIcon, X, PlusCircle, Layers, Box, Trash2, CornerDownRight } from 'lucide-react';
 import { COMPONENT_PALETTE } from '../constants';
@@ -75,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             key={block.id}
             onClick={(e) => handleLayerClick(e, block.id)}
             className={`
-                group flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all select-none mb-2
+                group flex items-center gap-3 p-2.5 rounded-2xl border cursor-pointer transition-all select-none mb-2
                 ${isSelected
                     ? 'bg-brand-orange/5 border-brand-orange shadow-sm' 
                     : 'bg-white border-gray-100 hover:border-gray-300 hover:bg-gray-50'}
@@ -83,7 +82,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             style={{ marginLeft: level * 16 }}
         >
             {level > 0 && <CornerDownRight size={12} className="text-gray-300 -ml-1" />}
-            <div className={`p-1.5 rounded-md ${isSelected ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'}`}>
+            <div className={`p-1.5 rounded-xl ${isSelected ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'}`}>
                 {getBlockIcon(block.type)}
             </div>
             <div className="flex-1 min-w-0">
@@ -101,7 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     e.stopPropagation();
                     onDeleteBlocks([block.id]);
                 }}
-                className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
             >
                 <Trash2 size={14} />
             </button>
@@ -147,10 +146,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Tabs */}
-            <div className="flex p-1 bg-gray-100 rounded-lg">
+            <div className="flex p-1 bg-gray-100 rounded-2xl">
                 <button
                     onClick={() => setActiveTab('blocks')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-md transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${
                         activeTab === 'blocks' 
                         ? 'bg-white text-gray-900 shadow-sm' 
                         : 'text-gray-500 hover:text-gray-700'
@@ -161,7 +160,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </button>
                 <button
                     onClick={() => setActiveTab('layers')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded-md transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-all ${
                         activeTab === 'layers' 
                         ? 'bg-white text-gray-900 shadow-sm' 
                         : 'text-gray-500 hover:text-gray-700'
@@ -190,9 +189,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             onAddBlock(component.type);
                             if (window.innerWidth < 768) onClose();
                         }}
-                        className="group relative flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-orange/50 cursor-grab active:cursor-grabbing transition-all duration-200 hover:-translate-y-0.5"
+                        className="group relative flex items-center gap-3 p-3 bg-white rounded-3xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-orange/50 cursor-grab active:cursor-grabbing transition-all duration-200 hover:-translate-y-0.5"
                     >
-                        <div className="text-brand-orange group-hover:scale-110 transition-transform p-2 bg-brand-orange/5 rounded-lg">
+                        <div className="text-brand-orange group-hover:scale-110 transition-transform p-2 bg-brand-orange/5 rounded-2xl">
                         {iconMap[component.icon]}
                         </div>
                         <div className="flex-1">
@@ -203,14 +202,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                         
                         {/* Hover Action */}
-                        <div className="md:opacity-0 group-hover:opacity-100 transition-opacity absolute right-3 bg-brand-cream p-1 rounded-md text-brand-orange">
+                        <div className="md:opacity-0 group-hover:opacity-100 transition-opacity absolute right-3 bg-brand-cream p-1 rounded-xl text-brand-orange">
                             <PlusCircle size={16} />
                         </div>
                     </div>
                     ))}
                 </div>
                 
-                <div className="mt-8 p-4 bg-accent-purple/5 rounded-xl border border-accent-purple/10">
+                <div className="mt-8 p-4 bg-accent-purple/5 rounded-3xl border border-accent-purple/10">
                     <h3 className="text-sm font-bold text-accent-purple mb-1">Sistema de Blocos</h3>
                     <p className="text-xs text-gray-600 leading-relaxed">
                     Arraste blocos para o canvas. 

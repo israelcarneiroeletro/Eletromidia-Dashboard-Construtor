@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Scaling, BarChart2, Image as ImageIcon, Activity, Layout, Edit2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -23,19 +22,19 @@ interface GridCanvasProps {
 
 // --- Constants ---
 const MIN_CHILD_COLS = 1;
-const MIN_CHILD_ROWS = 3; // Minimum height for components (2 visual rows + margins)
-const MIN_HERO_ROWS = 5;  // Minimum height for hero (4 visual rows + margins)
+// Height: 2 Full Rows (60px) + 1 (Half top, Half bottom) -> 3 Grid Units (Total 90px space, 60px visual)
+const MIN_CHILD_ROWS = 3; 
+const MIN_HERO_ROWS = 5;
 
 // --- Collision & Layout Helpers ---
 
 const isHorizontalOverlap = (a: GridPosition, b: GridPosition) => {
-  if (a.colStart + a.colSpan <= b.colStart) return false; // a left of b
-  if (a.colStart >= b.colStart + b.colSpan) return false; // a right of b
+  if (a.colStart + a.colSpan <= b.colStart) return false; 
+  if (a.colStart >= b.colStart + b.colSpan) return false;
   return true;
 };
 
 const isBufferViolation = (a: DashboardBlock, b: DashboardBlock) => {
-  // Allow Parent-Child overlap (Nesting)
   if (a.parentBlockId === b.id || b.parentBlockId === a.id) {
       return false;
   }
@@ -48,8 +47,9 @@ const isBufferViolation = (a: DashboardBlock, b: DashboardBlock) => {
   const aEnd = posA.rowStart + posA.rowSpan;
   const bEnd = posB.rowStart + posB.rowSpan;
 
-  if (aEnd < posB.rowStart) return false;
-  if (bEnd < posA.rowStart) return false;
+  // Standard overlapping check
+  if (aEnd <= posB.rowStart) return false;
+  if (bEnd <= posA.rowStart) return false;
 
   return true;
 };
@@ -59,11 +59,8 @@ const constrainToParent = (childPos: GridPosition, parent: DashboardBlock): Grid
     const { colStart: pCol, rowStart: pRow, colSpan: pSpan, rowSpan: pSpanH } = parent.position;
     const stackDirection = parent.heroProperties?.stackDirection || 'horizontal';
 
-    // --- Constraints (Padding) ---
-    // Vertical padding of 1 row (keeps header/footer space)
     const verticalPadding = 1;
-    // Horizontal padding 0 (We use visual padding in rendering instead of grid constraint)
-    const horizontalPadding = 0;
+    const horizontalPadding = 0; // Keep logic padding 0, visual padding handled in render
 
     const minRow = pRow + verticalPadding;
     const maxRowInclusive = pRow + pSpanH - 1 - verticalPadding;
@@ -73,26 +70,18 @@ const constrainToParent = (childPos: GridPosition, parent: DashboardBlock): Grid
     const availableWidth = Math.max(1, pSpan - (horizontalPadding * 2));
     const availableHeight = Math.max(1, pSpanH - (verticalPadding * 2));
 
-    // --- Apply Constraints based on Stack Direction ---
-
     if (stackDirection === 'vertical') {
-        // Vertical Stack: Force width to fill available parent width
         colStart = minCol;
         colSpan = availableWidth; 
     } else {
-        // Horizontal Stack: Force height to fill available parent height
         rowStart = minRow;
         rowSpan = availableHeight;
     }
 
-    // --- Universal Clamping ---
-
-    // Height
     if (rowSpan > availableHeight) rowSpan = availableHeight;
     if (rowStart < minRow) rowStart = minRow;
     if (rowStart + rowSpan - 1 > maxRowInclusive) rowStart = maxRowInclusive - rowSpan + 1;
 
-    // Width
     if (colSpan > availableWidth) colSpan = availableWidth;
     if (colStart < minCol) colStart = minCol;
     if (colStart + colSpan - 1 > maxColInclusive) colStart = maxColInclusive - colSpan + 1;
@@ -105,14 +94,12 @@ const moveBlock = (
   movedBlockIds: string[],
   newPositions: Record<string, GridPosition>
 ): DashboardBlock[] => {
-  // 1. Apply movements
   let updatedBlocks = blocks.map(b => 
     newPositions[b.id] 
       ? { ...b, position: newPositions[b.id] } 
       : b
   );
   
-  // 2. Sort for collision resolution
   updatedBlocks.sort((a, b) => {
       if (a.position.rowStart === b.position.rowStart) {
           return a.position.colStart - b.position.colStart;
@@ -120,7 +107,6 @@ const moveBlock = (
       return a.position.rowStart - b.position.rowStart;
   });
 
-  // 3. Resolve Collisions
   let hasCollision = true;
   let iterations = 0;
   while (hasCollision && iterations < 100) {
@@ -130,12 +116,9 @@ const moveBlock = (
     for(let i=0; i<updatedBlocks.length; i++) {
         const b1 = updatedBlocks[i];
         
-        // Nested Constraints & Logic
         if (b1.parentBlockId) {
             const parent = updatedBlocks.find(p => p.id === b1.parentBlockId);
             if (parent) {
-                // Just ensure it stays inside parent visually, 
-                // complex resizing is handled in interaction loop
                 const constrained = constrainToParent(b1.position, parent);
                 if (
                     constrained.colStart !== b1.position.colStart ||
@@ -148,7 +131,6 @@ const moveBlock = (
             }
         }
 
-        // Regular Global Collision
         for(let j=0; j<updatedBlocks.length; j++) {
             if(i === j) continue;
             const b2 = updatedBlocks[j];
@@ -210,7 +192,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
   
-  // --- Selection & Pan State ---
   const [isPanning, setIsPanning] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{x: number, y: number, w: number, h: number} | null>(null);
@@ -218,13 +199,17 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
   const selectionStartRef = useRef<{ x: number, y: number } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   
-  // --- Ghost State (Preview inside Hero) ---
+  // --- Interaction State ---
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<{x: number, y: number} | null>(null);
+
   const [ghostBlock, setGhostBlock] = useState<{
       position: GridPosition,
-      parentBlockId: string,
+      parentBlockId?: string,
       type: BlockType,
       contrastColor: string,
-      isValid: boolean
+      isValid: boolean,
+      isRoot?: boolean
   } | null>(null);
 
   if (!resolution) return null;
@@ -250,101 +235,176 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
     hasMoved: boolean;
     activeBlockId: string;
     selectionBounds: { minCol: number, maxCol: number, minRow: number, maxRow: number };
+    isRootDrag: boolean;
+    dragStartOffset: { x: number, y: number };
   } | null>(null);
 
-  // --- Helper to calculate ghost position ---
-  const calculateGhost = (x: number, y: number, widthCols: number, heightRows: number, type: BlockType, draggedBlockId?: string) => {
-      // Prevent Hero nesting inside Hero
-      if (type === BlockType.HERO) {
-          setGhostBlock(null);
-          return;
-      }
-
-      const { col, row } = getGridFromPixels(x, y);
-      
-      const potentialParent = blocks.find(other => 
-          other.type === BlockType.HERO &&
-          other.id !== draggedBlockId && // Can't be parent of self
-          col >= other.position.colStart &&
-          col < other.position.colStart + other.position.colSpan &&
-          row >= other.position.rowStart &&
-          row < other.position.rowStart + other.position.rowSpan
-      );
-
-      if (potentialParent) {
-          let tempPos = {
-              colStart: col,
-              rowStart: row,
-              colSpan: widthCols,
-              rowSpan: heightRows
-          };
-          
-          // 1. Constrain to Parent Boundaries first to get the "Ideal" slot
-          tempPos = constrainToParent(tempPos, potentialParent);
-          
-          // 2. Adaptive Sizing: Check against Siblings and Shrink to Fit
-          const siblings = blocks.filter(b => b.parentBlockId === potentialParent.id && b.id !== draggedBlockId);
-          const stackDir = potentialParent.heroProperties?.stackDirection || 'horizontal';
-
-          // Check overlap with siblings
-          const checkOverlap = (pos: GridPosition) => {
-              return siblings.some(sibling => {
-                  return !(pos.colStart + pos.colSpan <= sibling.position.colStart ||
-                           pos.colStart >= sibling.position.colStart + sibling.position.colSpan ||
-                           pos.rowStart + pos.rowSpan <= sibling.position.rowStart ||
-                           pos.rowStart >= sibling.position.rowStart + sibling.position.rowSpan);
-              });
-          };
-
-          // Try to fit by shrinking if overlapping
-          if (checkOverlap(tempPos)) {
-              if (stackDir === 'vertical') {
-                  // Vertical: Try to shrink Height to avoid overlap below
-                   const siblingBelow = siblings
-                        .filter(s => s.position.rowStart >= tempPos.rowStart)
-                        .sort((a,b) => a.position.rowStart - b.position.rowStart)[0];
-                   
-                   if (siblingBelow) {
-                       const avail = siblingBelow.position.rowStart - tempPos.rowStart;
-                       tempPos.rowSpan = Math.max(MIN_CHILD_ROWS, avail);
-                   }
-              } else {
-                   // Horizontal: Try to shrink Width to avoid overlap to right
-                   const siblingRight = siblings
-                        .filter(s => s.position.colStart >= tempPos.colStart)
-                        .sort((a,b) => a.position.colStart - b.position.colStart)[0];
-
-                   if (siblingRight) {
-                       const avail = siblingRight.position.colStart - tempPos.colStart;
-                       tempPos.colSpan = Math.max(MIN_CHILD_COLS, avail);
-                   }
-              }
-          }
-
-          // 3. Final Validation: Is it still overlapping or too small?
-          const isTooSmall = tempPos.colSpan < MIN_CHILD_COLS || tempPos.rowSpan < MIN_CHILD_ROWS;
-          const isOverlapping = checkOverlap(tempPos);
-          const isValid = !isTooSmall && !isOverlapping;
-          
-          // Calculate high contrast color based on parent bg
-          const parentBg = potentialParent.color || COLORS.brand.white;
-          const contrastColor = isValid 
-                ? getBestContrastingColor(parentBg, COLORS.brand.white, COLORS.brand.black)
-                : '#EF4444'; // Red for error
-
-          setGhostBlock({
-              position: tempPos,
-              parentBlockId: potentialParent.id,
-              type,
-              contrastColor,
-              isValid
-          });
-      } else {
-          setGhostBlock(null);
-      }
+  const getGridFromPixels = (x: number, y: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return { col: 1, row: 1 };
+    const relativeX = (x - rect.left) / safeZoom - MARGIN_PX;
+    const relativeY = (y - rect.top) / safeZoom - MARGIN_PX;
+    let col = Math.floor(relativeX / (colWidth + GUTTER_PX)) + 1;
+    let row = Math.floor(relativeY / ROW_HEIGHT) + 1;
+    col = Math.max(1, Math.min(gridColumns, col));
+    row = Math.max(1, row);
+    return { col, row };
   };
 
-  // --- Image Upload Handlers ---
+  const calculateGhost = (x: number, y: number, widthCols: number, heightRows: number, type: BlockType, draggedBlockId: string) => {
+      const { col, row } = getGridFromPixels(x, y);
+      
+      // Check if we are dragging multiple items (Group Drag)
+      const isMultiDrag = interaction && Object.keys(interaction.initialPositions).length > 1;
+
+      // 1. Check for Nesting (Hero) first
+      // Disable Nesting Logic if multi-dragging or if dragging a Hero (Heroes cannot be nested inside Heroes in this version)
+      if (type !== BlockType.HERO && !isMultiDrag) {
+          const potentialParent = blocks.find(other => 
+              other.type === BlockType.HERO &&
+              other.id !== draggedBlockId &&
+              col >= other.position.colStart &&
+              col < other.position.colStart + other.position.colSpan &&
+              row >= other.position.rowStart &&
+              row < other.position.rowStart + other.position.rowSpan
+          );
+
+          if (potentialParent) {
+              let tempPos = {
+                  colStart: col,
+                  rowStart: row,
+                  colSpan: widthCols,
+                  rowSpan: heightRows
+              };
+              
+              tempPos = constrainToParent(tempPos, potentialParent);
+              
+              const siblings = blocks.filter(b => b.parentBlockId === potentialParent.id && b.id !== draggedBlockId);
+              const stackDir = potentialParent.heroProperties?.stackDirection || 'horizontal';
+
+              const checkOverlap = (pos: GridPosition) => {
+                  return siblings.some(sibling => {
+                      return !(pos.colStart + pos.colSpan <= sibling.position.colStart ||
+                               pos.colStart >= sibling.position.colStart + sibling.position.colSpan ||
+                               pos.rowStart + pos.rowSpan <= sibling.position.rowStart ||
+                               pos.rowStart >= sibling.position.rowStart + sibling.position.rowSpan);
+                  });
+              };
+
+              if (checkOverlap(tempPos)) {
+                  if (stackDir === 'vertical') {
+                       const siblingBelow = siblings
+                            .filter(s => s.position.rowStart >= tempPos.rowStart)
+                            .sort((a,b) => a.position.rowStart - b.position.rowStart)[0];
+                       
+                       if (siblingBelow) {
+                           const avail = siblingBelow.position.rowStart - tempPos.rowStart;
+                           tempPos.rowSpan = Math.max(MIN_CHILD_ROWS, avail);
+                       }
+                  } else {
+                       const siblingRight = siblings
+                            .filter(s => s.position.colStart >= tempPos.colStart)
+                            .sort((a,b) => a.position.colStart - b.position.colStart)[0];
+
+                       if (siblingRight) {
+                           const avail = siblingRight.position.colStart - tempPos.colStart;
+                           tempPos.colSpan = Math.max(MIN_CHILD_COLS, avail);
+                       }
+                  }
+              }
+
+              const isTooSmall = tempPos.colSpan < MIN_CHILD_COLS || tempPos.rowSpan < MIN_CHILD_ROWS;
+              const isOverlapping = checkOverlap(tempPos);
+              const isValid = !isTooSmall && !isOverlapping;
+              
+              const parentBg = potentialParent.color || COLORS.brand.white;
+              const contrastColor = isValid 
+                    ? getBestContrastingColor(parentBg, COLORS.brand.white, COLORS.brand.black)
+                    : '#EF4444';
+
+              setGhostBlock({
+                  position: tempPos,
+                  parentBlockId: potentialParent.id,
+                  type,
+                  contrastColor,
+                  isValid,
+                  isRoot: false
+              });
+              return;
+          }
+      }
+
+      // 2. Root Ghost (Main Canvas) - Supports Single and Multi-Select
+      const clampedCol = Math.max(1, Math.min(gridColumns - widthCols + 1, col));
+      const clampedRow = Math.max(1, row);
+
+      const primaryGhostPos: GridPosition = {
+          colStart: clampedCol,
+          colSpan: widthCols,
+          rowStart: clampedRow,
+          rowSpan: heightRows
+      };
+
+      let isGroupValid = true;
+      let deltaCol = 0;
+      let deltaRow = 0;
+
+      const movingIds = interaction ? Object.keys(interaction.initialPositions) : [draggedBlockId];
+      const nonMovingBlocks = blocks.filter(b => !movingIds.includes(b.id));
+
+      // If we are dragging existing blocks, check the whole group
+      if (interaction && interaction.type === 'DRAG' && interaction.initialPositions[draggedBlockId]) {
+          const init = interaction.initialPositions[draggedBlockId];
+          deltaCol = clampedCol - init.colStart;
+          deltaRow = clampedRow - init.rowStart;
+          
+          // Check Validity for ALL moving blocks
+          for (const id of movingIds) {
+               const bInit = interaction.initialPositions[id];
+               const target = {
+                   ...bInit,
+                   colStart: bInit.colStart + deltaCol,
+                   rowStart: bInit.rowStart + deltaRow
+               };
+               
+               // Boundary Check
+               if (target.colStart < 1 || target.colStart + target.colSpan - 1 > gridColumns || target.rowStart < 1) {
+                   isGroupValid = false; 
+                   break;
+               }
+               
+               // Collision Check
+               const temp = { ...blocks.find(b=>b.id===id)!, position: target };
+               if (nonMovingBlocks.some(other => isBufferViolation(temp, other))) {
+                   isGroupValid = false;
+                   break;
+               }
+          }
+      } else {
+          // Single / New Block Drag (No Interaction state yet or New Block)
+           const tempBlock: DashboardBlock = { 
+               id: 'ghost', type: type, title: '', position: primaryGhostPos, color: '' 
+           };
+           if (blocks.some(other => isBufferViolation(tempBlock, other))) {
+               isGroupValid = false;
+           }
+      }
+
+      // Ensure Contrast against Canvas Background
+      // Use stricter contrast for ghost to guarantee visibility
+      const contrastColor = isGroupValid 
+          ? getBestContrastingColor(canvasBackgroundColor, COLORS.brand.black, COLORS.brand.white)
+          : '#EF4444';
+
+      setGhostBlock({
+          position: primaryGhostPos,
+          type,
+          contrastColor,
+          isValid: isGroupValid,
+          isRoot: true
+      });
+  };
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && uploadingBlockId) {
           const reader = new FileReader();
@@ -362,11 +422,9 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
 
   const triggerImageUpload = (blockId: string) => {
       setUploadingBlockId(blockId);
-      // Small timeout to ensure state is set before click if needed, though React 18 batches.
       setTimeout(() => imageInputRef.current?.click(), 0);
   };
 
-  // --- Keyboard Listeners ---
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
           if (e.code === 'Space' && !e.repeat) setIsSpacePressed(true);
@@ -382,7 +440,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
       };
   }, []);
 
-  // --- Pan & Zoom Handlers ---
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
         if (e.ctrlKey) {
@@ -427,7 +484,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
      }
   };
 
-  // Global Mouse Move/Up
   useEffect(() => {
       const handleGlobalMove = (e: MouseEvent) => {
           if (isPanning && panStartRef.current && scrollContainerRef.current) {
@@ -504,9 +560,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
       };
   }, [isPanning, isSelecting, safeZoom, blocks, colWidth, onSelectBlocks]);
 
-
-  // --- Block Interaction Logic ---
-
   const handleInteractionStart = (
       e: React.MouseEvent | React.TouchEvent, 
       blockId: string, 
@@ -517,7 +570,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-      // Selection Logic
       let newSelectedIds = [...selectedBlockIds];
       if (e.shiftKey || e.ctrlKey) {
           if (!newSelectedIds.includes(blockId)) {
@@ -530,6 +582,7 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
       }
       onSelectBlocks(newSelectedIds);
 
+      // Identify all blocks to move (Including Children)
       const effectiveIdsToMove = new Set(newSelectedIds);
       blocks.forEach(b => {
           if (newSelectedIds.includes(b.id) && b.type === BlockType.HERO) {
@@ -550,6 +603,24 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
           }
       });
 
+      // Determine drag offset relative to block
+      const rect = (e.target as HTMLElement).closest('.group')?.getBoundingClientRect();
+      const offsetX = rect ? clientX - rect.left : 0;
+      const offsetY = rect ? clientY - rect.top : 0;
+
+      // --- Determine Drag Mode ---
+      // If ANY selected block is a Root block (no parent), or we are dragging multiple items,
+      // we force "Root Drag" mode (Ghost-based absolute movement). 
+      // This ensures groups move as a single rigid object.
+      // We only use "Shuffle" mode (live reorder) when dragging a single Child block.
+      const isMultiSelection = effectiveIdsToMove.size > 1;
+      const hasRootInSelection = Array.from(effectiveIdsToMove).some(id => {
+           const b = blocks.find(block => block.id === id);
+           return b && !b.parentBlockId;
+      });
+
+      const isRootDrag = type === 'DRAG' && (hasRootInSelection || isMultiSelection);
+
       setInteraction({
           type,
           activeBlockId: blockId,
@@ -557,11 +628,17 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
           startY: clientY,
           initialPositions,
           hasMoved: false,
-          selectionBounds: { minCol, maxCol, minRow, maxRow }
+          selectionBounds: { minCol, maxCol, minRow, maxRow },
+          isRootDrag,
+          dragStartOffset: { x: offsetX, y: offsetY }
       });
+
+      if (isRootDrag) {
+          setActiveDragId(blockId);
+          setDragPosition({ x: clientX - offsetX, y: clientY - offsetY });
+      }
   };
 
-  // Interaction Move/End
   useEffect(() => {
       const handleMove = (e: MouseEvent | TouchEvent) => {
           if (!interaction) return;
@@ -569,6 +646,11 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
 
           const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
           const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+          // Root Drag Visual Update
+          if (interaction.isRootDrag && activeDragId) {
+               setDragPosition({ x: clientX - interaction.dragStartOffset.x, y: clientY - interaction.dragStartOffset.y });
+          }
 
           const deltaXPixels = (clientX - interaction.startX) / safeZoom;
           const deltaYPixels = (clientY - interaction.startY) / safeZoom;
@@ -578,25 +660,42 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
              setInteraction(prev => prev ? ({...prev, hasMoved: true}) : null);
           }
 
+          const activeBlock = blocks.find(b => b.id === interaction.activeBlockId);
+
+          // GHOST CALCULATION
+          if (interaction.type === 'DRAG' && activeBlock) {
+               const blockW = activeBlock.position.colSpan * colWidth;
+               const blockH = activeBlock.position.rowSpan * ROW_HEIGHT;
+               
+               const virtualLeft = clientX - interaction.dragStartOffset.x;
+               const virtualTop = clientY - interaction.dragStartOffset.y;
+               const centerX = virtualLeft + (blockW * safeZoom / 2);
+               const centerY = virtualTop + (blockH * safeZoom / 2);
+
+               calculateGhost(centerX, centerY, activeBlock.position.colSpan, activeBlock.position.rowSpan, activeBlock.type, activeBlock.id);
+          }
+
+          // If dragging a Root block or Group, we DO NOT update the actual blocks array (no shuffle).
+          if (interaction.isRootDrag) {
+              return; 
+          }
+
+          // --- Standard Logic (Children Shuffle & Resize) ---
+
           const colDeltaRaw = Math.round(deltaXPixels / (colWidth + GUTTER_PX));
           const rowDeltaRaw = Math.round(deltaYPixels / ROW_HEIGHT);
 
           const { minCol, maxCol } = interaction.selectionBounds;
-          
           const clampedColDelta = Math.max(1 - minCol, Math.min(gridColumns + 1 - maxCol, colDeltaRaw));
           const clampedRowDelta = Math.max(1 - interaction.selectionBounds.minRow, rowDeltaRaw); 
 
           const newPositions: Record<string, GridPosition> = {};
           let hasChanges = false;
-
           const targetIds = Object.keys(interaction.initialPositions);
 
           targetIds.forEach(id => {
               const block = blocks.find(b => b.id === id);
-
-              // Prevent overwriting children if parent is resizing them
-              const parentIsActiveResizer = block?.parentBlockId && block.parentBlockId === interaction.activeBlockId && interaction.type === 'RESIZE';
-              if (parentIsActiveResizer) return;
+              if (block?.parentBlockId && block.parentBlockId === interaction.activeBlockId && interaction.type === 'RESIZE') return;
 
               const initial = interaction.initialPositions[id];
               const newPos = { ...initial };
@@ -605,49 +704,45 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                   newPos.colStart = initial.colStart + clampedColDelta;
                   newPos.rowStart = initial.rowStart + clampedRowDelta;
               } else if (id === interaction.activeBlockId) {
+                  // RESIZE LOGIC
                   const deltaC = Math.round(deltaXPixels / (colWidth + GUTTER_PX));
                   const deltaR = Math.round(deltaYPixels / ROW_HEIGHT);
                   
                   let newColSpan = Math.max(1, Math.min(gridColumns - initial.colStart + 1, initial.colSpan + deltaC));
-                  
-                  // Determine Min Rows based on type
                   const minRows = block?.type === BlockType.HERO ? MIN_HERO_ROWS : MIN_CHILD_ROWS;
                   let newRowSpan = Math.max(minRows, initial.rowSpan + deltaR);
 
-                  // Constraint: If Child, respect Parent bounds
+                  // Enforce Anchor Position Stability during Resize
+                  newPos.colStart = initial.colStart;
+                  newPos.rowStart = initial.rowStart;
+
+                  // Nested constraints...
                   if (block?.parentBlockId) {
                       const parent = blocks.find(p => p.id === block.parentBlockId);
                       if (parent) {
-                          const padding = 0; // Changed to 0 to match new constraint logic
+                          const padding = 0;
                           const maxColAvailable = (parent.position.colStart + parent.position.colSpan - padding) - initial.colStart;
-                          const maxRowAvailable = (parent.position.rowStart + parent.position.rowSpan - 1) - initial.rowStart; // -1 for bottom padding
-                          
+                          const maxRowAvailable = (parent.position.rowStart + parent.position.rowSpan - 1) - initial.rowStart;
                           newColSpan = Math.min(newColSpan, maxColAvailable);
                           newRowSpan = Math.min(newRowSpan, maxRowAvailable);
                       }
                   }
 
                   if (block && block.type === BlockType.HERO) {
-                      // Hero Resize Logic
+                       // Hero Logic maintained...
                       const stackDir = block.heroProperties?.stackDirection || 'horizontal';
                       const children = blocks.filter(child => child.parentBlockId === id);
-                      const padding = 0; // 0 horizontal padding
+                      const padding = 0;
                       
-                      // Calculate MINIMUM dimensions required by children
-                      // If any child hits min size, we must block resizing the hero smaller
                       let minRequiredWidth = 5;
                       let minRequiredHeight = 3;
 
                       if (children.length > 0) {
                            if (stackDir === 'horizontal') {
-                               // Sum of minimum width of all children
                                minRequiredWidth = (children.length * MIN_CHILD_COLS) + padding;
-                               // Max of minimum height of children (plus padding)
                                minRequiredHeight = MIN_CHILD_ROWS + padding;
                            } else {
-                               // Max of minimum width of children
                                minRequiredWidth = MIN_CHILD_COLS + padding;
-                               // Sum of minimum height of all children
                                minRequiredHeight = (children.length * MIN_CHILD_ROWS) + padding;
                            }
                       }
@@ -655,17 +750,14 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                       newColSpan = Math.max(minRequiredWidth, newColSpan);
                       newRowSpan = Math.max(minRequiredHeight, newRowSpan);
 
-                      // Sibling Clamp Logic to avoid "Self Displacement" via Collision Resolver
                       const siblings = blocks.filter(b => b.id !== id && b.parentBlockId === block.parentBlockId);
                       for (const sib of siblings) {
-                          // Y Overlap Check
                           const myY1 = initial.rowStart;
                           const myY2 = initial.rowStart + newRowSpan;
                           const sibY1 = sib.position.rowStart;
                           const sibY2 = sib.position.rowStart + sib.position.rowSpan;
                           
                           if (myY1 < sibY2 && myY2 > sibY1) {
-                               // Check if we are expanding Right into a sibling
                                if (initial.colStart + initial.colSpan <= sib.position.colStart) {
                                    const avail = sib.position.colStart - initial.colStart;
                                    newColSpan = Math.min(newColSpan, avail);
@@ -703,71 +795,50 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                                 if (stackDir === 'horizontal') {
                                      const initRelStart = initChildPos.colStart - (initHeroPos.colStart + 0);
                                      const initRelWidth = initChildPos.colSpan;
-
                                      let newRelWidth = Math.max(MIN_CHILD_COLS, Math.round(initRelWidth * scaleX));
-                                     // Accumulate rounding errors or min-size enforcement could push bounds
-                                     
                                      const initRelHeight = initChildPos.rowSpan;
                                      let newRelHeight = Math.max(MIN_CHILD_ROWS, Math.round(initRelHeight * scaleY));
-                                     // Vertical constraint for horizontal stack child
                                      if (newRelHeight > curAvailableH) newRelHeight = curAvailableH;
-
                                      let newChildStart = newPos.colStart + 0 + Math.round(initRelStart * scaleX);
                                      if (newChildStart < previousEnd) newChildStart = previousEnd;
-
-                                     // Safety Check: If this child pushes past the Hero boundary, invalidate/clamp
                                      if (newChildStart + newRelWidth > newPos.colStart + newColSpan) {
-                                          // Try to squeeze
                                           newRelWidth = (newPos.colStart + newColSpan) - newChildStart;
                                      }
-
                                      if (newRelWidth < MIN_CHILD_COLS) resizeInvalid = true;
 
                                      potentialChildrenUpdates[child.id] = {
                                          colStart: newChildStart,
                                          colSpan: newRelWidth,
                                          rowStart: newPos.rowStart + 1, 
-                                         rowSpan: newRelHeight // Adapt height to parent
+                                         rowSpan: newRelHeight
                                      };
-                                     
                                      previousEnd = newChildStart + newRelWidth;
-
                                 } else {
-                                     // Vertical
                                      const initRelStart = initChildPos.rowStart - (initHeroPos.rowStart + 1);
                                      const initRelHeight = initChildPos.rowSpan;
-
                                      let newRelHeight = Math.max(MIN_CHILD_ROWS, Math.round(initRelHeight * scaleY));
-                                     
                                      const initRelWidth = initChildPos.colSpan;
                                      let newRelWidth = Math.max(MIN_CHILD_COLS, Math.round(initRelWidth * scaleX));
                                      if (newRelWidth > curAvailableW) newRelWidth = curAvailableW;
-
                                      let newChildStart = newPos.rowStart + 1 + Math.round(initRelStart * scaleY);
                                      if (newChildStart < previousEnd) newChildStart = previousEnd;
-
                                      if (newChildStart + newRelHeight > newPos.rowStart + newRowSpan - 1) {
                                          newRelHeight = (newPos.rowStart + newRowSpan - 1) - newChildStart;
                                      }
-
                                      if (newRelHeight < MIN_CHILD_ROWS) resizeInvalid = true;
-
                                      potentialChildrenUpdates[child.id] = {
-                                         colStart: newPos.colStart + 0, // No offset for vertical stack
+                                         colStart: newPos.colStart + 0, 
                                          colSpan: newRelWidth,
                                          rowStart: newChildStart,
                                          rowSpan: newRelHeight
                                      };
-
                                      previousEnd = newChildStart + newRelHeight;
                                 }
                            });
 
                            if (!resizeInvalid) {
                                Object.assign(newPositions, potentialChildrenUpdates);
-                               hasChanges = true;
                            } else {
-                               // Block resize if it violates children min constraints
                                return; 
                            }
                       }
@@ -787,15 +858,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                   newPositions[id] = newPos;
               }
           });
-          
-          if (interaction.type === 'DRAG' && targetIds.length === 1) {
-             const draggedBlock = blocks.find(b => b.id === targetIds[0]);
-             if (draggedBlock) {
-                 const centerX = interaction.startX + deltaXPixels * safeZoom;
-                 const centerY = interaction.startY + deltaYPixels * safeZoom; 
-                 calculateGhost(centerX, centerY, draggedBlock.position.colSpan, draggedBlock.position.rowSpan, draggedBlock.type, draggedBlock.id);
-             }
-          }
 
           if (hasChanges) {
               const resolvedBlocks = moveBlock(blocks, targetIds, newPositions);
@@ -807,55 +869,60 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
           if (!interaction) return;
           
           if (interaction.type === 'DRAG' && interaction.hasMoved) {
-              if (ghostBlock) {
-                   if (ghostBlock.isValid) {
+              // Handle Root Drop (Ghost based)
+              if (interaction.isRootDrag && activeDragId) {
+                  if (ghostBlock && ghostBlock.isValid) {
+                       const initActive = interaction.initialPositions[activeDragId];
+                       const deltaCol = ghostBlock.position.colStart - initActive.colStart;
+                       const deltaRow = ghostBlock.position.rowStart - initActive.rowStart;
+
+                       // Update ALL moving blocks (Rigid Group Move)
+                       const movingIds = Object.keys(interaction.initialPositions);
+                       const updatedBlocks = blocks.map(b => {
+                           if (movingIds.includes(b.id)) {
+                               const init = interaction.initialPositions[b.id];
+                               return {
+                                   ...b,
+                                   position: {
+                                       ...b.position,
+                                       colStart: init.colStart + deltaCol,
+                                       rowStart: init.rowStart + deltaRow
+                                   },
+                                   // If we drag a single block into a Hero, it might become a child.
+                                   // But if we move a whole group (Hero+Children), they stay as is.
+                                   // The ghost block tracks the active block's parent.
+                                   parentBlockId: (b.id === activeDragId) ? ghostBlock.parentBlockId : b.parentBlockId
+                               };
+                           }
+                           return b;
+                       });
+                       onUpdateBlocks(updatedBlocks);
+                  } else {
+                      // Invalid Drop - Revert (do nothing)
+                  }
+              } 
+              // Handle Child Drop (Live Update based)
+              else if (!interaction.isRootDrag) {
+                   if (ghostBlock && ghostBlock.isValid) {
                        const targetId = Object.keys(interaction.initialPositions)[0];
-                       const block = blocks.find(b => b.id === targetId);
-                       if (block) {
-                           const updatedBlocks = blocks.map(b => 
-                               b.id === targetId 
-                               ? { ...b, position: ghostBlock.position, parentBlockId: ghostBlock.parentBlockId } 
-                               : b
-                           );
-                           onUpdateBlocks(moveBlock(updatedBlocks, [targetId], {}));
-                       }
+                       const updatedBlocks = blocks.map(b => 
+                           b.id === targetId 
+                           ? { ...b, position: ghostBlock.position, parentBlockId: ghostBlock.parentBlockId } 
+                           : b
+                       );
+                       onUpdateBlocks(moveBlock(updatedBlocks, [targetId], {}));
                    } else {
-                       // Invalid Drop - Revert (Do nothing, as we haven't committed changes to state other than intermediate moves)
-                       // Actually, we were updating state live in handleMove. We need to snap back if invalid ghost.
-                       // But wait, moveBlock updates the main state. 
-                       // If we are dragging, the block follows the mouse via interaction loop (visually?), 
-                       // NO, we are updating 'blocks' state in handleMove.
-                       // So we MUST revert if ghost is invalid and we were trying to enter a parent.
-                       
-                       // Use the initial position to revert if the ghost was active but invalid
-                       const targetId = Object.keys(interaction.initialPositions)[0];
-                       const initial = interaction.initialPositions[targetId];
-                       
-                       // If we were trying to drag into a parent (ghost active) but it was red:
-                       // Revert to position BEFORE we entered the ghost state/start of drag
-                       onUpdateBlocks(blocks.map(b => b.id === targetId ? { ...b, position: initial } : b));
+                        const targetId = Object.keys(interaction.initialPositions)[0];
+                        let finalBlocks = [...blocks];
+                        onUpdateBlocks(moveBlock(finalBlocks, [], {}));
                    }
-              } else {
-                  const targetIds = Object.keys(interaction.initialPositions);
-                  let finalBlocks = [...blocks];
-                  
-                  finalBlocks = finalBlocks.map(b => {
-                      // Detach if parent is not moving with it
-                      if (targetIds.includes(b.id) && b.parentBlockId) {
-                          const parentIsMoving = targetIds.includes(b.parentBlockId);
-                          if (!parentIsMoving) {
-                              return { ...b, parentBlockId: undefined };
-                          }
-                      }
-                      return b;
-                  });
-                  
-                  onUpdateBlocks(moveBlock(finalBlocks, [], {}));
               }
           }
           
           setGhostBlock(null);
           setInteraction(null);
+          setActiveDragId(null);
+          setDragPosition(null);
       };
 
       if (interaction) {
@@ -870,14 +937,13 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
           window.removeEventListener('touchmove', handleMove);
           window.removeEventListener('touchend', handleEnd);
       };
-  }, [interaction, blocks, colWidth, safeZoom, onUpdateBlocks, gridColumns, onSaveCheckpoint, ghostBlock]);
+  }, [interaction, blocks, colWidth, safeZoom, onUpdateBlocks, gridColumns, onSaveCheckpoint, ghostBlock, activeDragId, canvasBackgroundColor]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const data = e.dataTransfer.getData('application/json');
     if (!data) return;
     
-    // Check validity if dropping into ghost
     if (ghostBlock && !ghostBlock.isValid) {
         setGhostBlock(null);
         return;
@@ -920,24 +986,12 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
     setGhostBlock(null);
   };
 
-  const getGridFromPixels = (x: number, y: number) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return { col: 1, row: 1 };
-    const relativeX = (x - rect.left) / safeZoom - MARGIN_PX;
-    const relativeY = (y - rect.top) / safeZoom - MARGIN_PX;
-    let col = Math.floor(relativeX / (colWidth + GUTTER_PX)) + 1;
-    let row = Math.floor(relativeY / ROW_HEIGHT) + 1;
-    col = Math.max(1, Math.min(gridColumns, col));
-    row = Math.max(1, row);
-    return { col, row };
-  };
-
   const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
       if (draggingBlockType) {
         const preset = COMPONENT_PALETTE.find(c => c.type === draggingBlockType);
         if (preset) {
-            calculateGhost(e.clientX, e.clientY, preset.defaultCols, preset.defaultRows, draggingBlockType);
+            calculateGhost(e.clientX, e.clientY, preset.defaultCols, preset.defaultRows, draggingBlockType, 'new-block');
         }
       }
   };
@@ -994,18 +1048,87 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
     );
   };
 
-  // Sort: Hero (5/10) < Children (20/30).
-  // If Hero is selected, it goes to 10 (above unselected Heroes, below children).
+  // Sort Logic
   const sortedBlocks = [...blocks].sort((a, b) => {
       const isASel = selectedBlockIds.includes(a.id);
       const isBSel = selectedBlockIds.includes(b.id);
-      
       const getZ = (block: DashboardBlock, isSel: boolean) => {
           if (block.type === BlockType.HERO) return isSel ? 10 : 5; 
           return isSel ? 30 : 20;
       }
       return getZ(a, isASel) - getZ(b, isBSel);
   });
+
+  const renderBlockContent = (block: DashboardBlock, isSelected: boolean, mutedColor: string, textColor: string) => {
+      const hasChildren = blocks.some(b => b.parentBlockId === block.id);
+      
+      let contentPreview = null;
+      switch(block.type) {
+          case BlockType.HERO:
+              contentPreview = (
+                <div className="w-full h-full flex flex-col p-6 pt-12 opacity-40 relative block-content-wrapper">
+                    {!hasChildren && (
+                        <div className="h-8 w-2/3 mb-4 rounded-full export-hide" style={{ backgroundColor: textColor }} />
+                    )}
+                    {isSelected && (
+                        <div className="absolute inset-6 border-2 border-dashed border-current opacity-30 rounded-2xl flex items-center justify-center pointer-events-none">
+                            <span className="text-[10px] uppercase font-mono">
+                                {block.heroProperties?.stackDirection === 'vertical' ? 'Stack Vertical' : 'Stack Horizontal'}
+                            </span>
+                        </div>
+                    )}
+                </div>
+              );
+              break;
+          case BlockType.STATS:
+              contentPreview = <div className="w-full h-full flex flex-col justify-between p-4 pt-10 block-content-wrapper"><div className="text-4xl font-bold export-hide" style={{ color: textColor }}>86%</div></div>;
+              break;
+          case BlockType.METRIC:
+              contentPreview = <div className="w-full h-full flex flex-col justify-center items-center p-4 pt-10 text-center block-content-wrapper"><Activity size={32} className="mb-2 export-hide" style={{ color: textColor }} /></div>;
+              break;
+          case BlockType.IMAGE:
+              contentPreview = (
+                  <div className="w-full h-full relative flex flex-col rounded-2xl overflow-hidden pointer-events-auto block-content-wrapper">
+                      {block.content ? (
+                           <div className="relative w-full h-full group/image">
+                               <img 
+                                    src={block.content} 
+                                    alt="Block Media" 
+                                    className="w-full h-full object-cover"
+                                    draggable={false}
+                                    onDragStart={(e) => e.preventDefault()}
+                               />
+                               <button 
+                                   onMouseDown={e => e.stopPropagation()}
+                                   onClick={() => triggerImageUpload(block.id)}
+                                   className="absolute top-2 right-2 bg-white/80 hover:bg-white text-gray-800 p-1.5 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity shadow-sm z-10 export-hide"
+                                   title="Alterar Imagem"
+                               >
+                                   <Edit2 size={14} />
+                               </button>
+                           </div>
+                      ) : (
+                           <button 
+                               onMouseDown={e => e.stopPropagation()}
+                               onClick={() => triggerImageUpload(block.id)}
+                               className="w-full h-full flex flex-col items-center justify-center bg-black/5 hover:bg-black/10 transition-colors text-gray-400 hover:text-brand-orange gap-2 border-2 border-dashed border-transparent hover:border-brand-orange/50 rounded-2xl pt-8 export-hide"
+                           >
+                               <ImageIcon size={32} />
+                               <span className="text-xs font-medium">Adicionar Imagem</span>
+                           </button>
+                      )}
+                  </div>
+              );
+              break;
+          case BlockType.CHART:
+               contentPreview = <div className="w-full h-full flex items-end gap-2 p-6 pt-14 justify-center opacity-50 block-content-wrapper"><BarChart2 size={32} className="export-hide" style={{color: textColor}} /></div>;
+               break;
+          case BlockType.LIST:
+              contentPreview = <div className="p-4 pt-12 space-y-3 opacity-30 block-content-wrapper"><div className="h-2 w-full rounded export-hide" style={{ backgroundColor: textColor }} /></div>;
+              break;
+      }
+      return contentPreview;
+  };
 
   return (
     <div 
@@ -1015,7 +1138,22 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
       onMouseDown={handleMouseDown}
       id="canvas-bg"
     >
-      {/* Hidden Input for File Upload */}
+      <style>{`
+        .clean-export-mode .export-hide,
+        .clean-export-mode .block-header-wrapper {
+            opacity: 0 !important;
+            pointer-events: none;
+        }
+        /* Ensure images stay visible in clean mode */
+        .clean-export-mode img {
+            opacity: 1 !important;
+        }
+        /* More rounded blocks for the requested aesthetic */
+        .rounded-extra {
+            border-radius: 2.5rem; 
+        }
+      `}</style>
+
       <input 
         type="file"
         accept="image/*"
@@ -1024,7 +1162,6 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
         onChange={handleImageSelect}
       />
 
-      {/* Selection Box Overlay */}
       {selectionBox && (
           <div 
             className="absolute border border-brand-orange bg-brand-orange/10 z-50 pointer-events-none"
@@ -1062,20 +1199,163 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
           >
             {renderGrid()}
 
-            {/* Render Ghost Block if active */}
-            {ghostBlock && (() => {
-                // Calculate Ghost Position using the same logic as regular children
-                let left = MARGIN_PX + (ghostBlock.position.colStart - 1) * (colWidth + GUTTER_PX);
-                let width = (ghostBlock.position.colSpan * colWidth) + ((ghostBlock.position.colSpan - 1) * GUTTER_PX);
-                const top = MARGIN_PX + (ghostBlock.position.rowStart - 1) * ROW_HEIGHT + (ROW_HEIGHT * 0.5);
-                const height = ghostBlock.position.rowSpan * ROW_HEIGHT - ROW_HEIGHT;
-                
-                if (ghostBlock.parentBlockId) {
+            {/* Floating Dragged Blocks (Group Drag) */}
+            {interaction?.type === 'DRAG' && activeDragId && dragPosition && (() => {
+                 const rect = containerRef.current?.getBoundingClientRect();
+                 if (!rect) return null;
+
+                 // Active Block Position (Canvas Space)
+                 const activeX = (dragPosition.x - rect.left) / safeZoom;
+                 const activeY = (dragPosition.y - rect.top) / safeZoom;
+                 
+                 const activeInit = interaction.initialPositions[activeDragId];
+                 if (!activeInit) return null;
+
+                 // Render all moving blocks relative to the active drag
+                 return (
+                    <>
+                        {Object.keys(interaction.initialPositions).map(id => {
+                            const block = blocks.find(b => b.id === id);
+                            if (!block) return null;
+                            
+                            const init = interaction.initialPositions[id];
+                            
+                            // Helper to get initial pixel coords
+                            const getPx = (pos: GridPosition) => ({
+                                x: MARGIN_PX + (pos.colStart - 1) * (colWidth + GUTTER_PX),
+                                y: MARGIN_PX + (pos.rowStart - 1) * ROW_HEIGHT + (ROW_HEIGHT * 0.5)
+                            });
+                            
+                            const activePx = getPx(activeInit);
+                            const currentPx = getPx(init);
+                            
+                            const offsetX = currentPx.x - activePx.x;
+                            const offsetY = currentPx.y - activePx.y;
+                            
+                            const left = activeX + offsetX;
+                            const top = activeY + offsetY;
+                            
+                            const width = (block.position.colSpan * colWidth) + ((block.position.colSpan - 1) * GUTTER_PX);
+                            const height = block.position.rowSpan * ROW_HEIGHT - ROW_HEIGHT;
+                            
+                            const textColor = getBestContrastingColor(block.color || '#FFFFFF', '#FFFFFF', '#000000');
+                            
+                            return (
+                                <div
+                                    key={`float-${id}`}
+                                    style={{
+                                        left, top, width, height,
+                                        backgroundColor: block.color || COLORS.brand.white,
+                                        color: textColor,
+                                        zIndex: 100 + (block.type === BlockType.HERO ? 0 : 1), // Children above
+                                        pointerEvents: 'none',
+                                        opacity: 0.9,
+                                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+                                    }}
+                                    className="absolute rounded-[2rem] border border-brand-orange flex items-center justify-center"
+                                >
+                                    {renderBlockContent(block, true, 'rgba(0,0,0,0.5)', textColor)}
+                                </div>
+                            );
+                        })}
+                    </>
+                 );
+            })()}
+
+            {/* Ghost Blocks (Group) */}
+            {ghostBlock && interaction?.type === 'DRAG' && (() => {
+                 // Calculate delta based on ghostBlock.position vs active block initial
+                 const initActive = interaction.initialPositions[interaction.activeBlockId];
+                 const deltaCol = ghostBlock.position.colStart - initActive.colStart;
+                 const deltaRow = ghostBlock.position.rowStart - initActive.rowStart;
+
+                 return Object.keys(interaction.initialPositions).map(id => {
+                     const init = interaction.initialPositions[id];
+                     const pos = {
+                         colStart: init.colStart + deltaCol,
+                         rowStart: init.rowStart + deltaRow,
+                         colSpan: init.colSpan,
+                         rowSpan: init.rowSpan
+                     };
+                     
+                     // Calculate Pixel Rect
+                     const left = MARGIN_PX + (pos.colStart - 1) * (colWidth + GUTTER_PX);
+                     const width = (pos.colSpan * colWidth) + ((pos.colSpan - 1) * GUTTER_PX);
+                     const top = MARGIN_PX + (pos.rowStart - 1) * ROW_HEIGHT + (ROW_HEIGHT * 0.5);
+                     const height = pos.rowSpan * ROW_HEIGHT - ROW_HEIGHT;
+                     
+                     // Handling Nested Scaling for Ghost Appearance
+                     let finalLeft = left;
+                     let finalWidth = width;
+                     
+                     const block = blocks.find(b => b.id === id);
+                     if (block?.parentBlockId) {
+                          const parentId = block.parentBlockId;
+                          // Parent could be moving or static
+                          let parentPos = blocks.find(p => p.id === parentId)?.position;
+                          
+                          if (interaction.initialPositions[parentId]) {
+                              // Parent is moving too
+                              const pInit = interaction.initialPositions[parentId];
+                              parentPos = {
+                                  ...pInit,
+                                  colStart: pInit.colStart + deltaCol,
+                                  rowStart: pInit.rowStart + deltaRow
+                              };
+                          }
+                          
+                          if (parentPos) {
+                               const parentLeft = MARGIN_PX + (parentPos.colStart - 1) * (colWidth + GUTTER_PX);
+                               const parentWidth = (parentPos.colSpan * colWidth) + ((parentPos.colSpan - 1) * GUTTER_PX);
+                               const paddingX = GUTTER_PX; // Explicitly maintain Horizontal Padding
+                               const innerWidth = parentWidth - (paddingX * 2);
+                               const scale = innerWidth / parentWidth;
+                               const relLeft = left - parentLeft;
+                               finalLeft = parentLeft + paddingX + (relLeft * scale);
+                               finalWidth = width * scale;
+                          }
+                     }
+                     
+                     return (
+                        <div
+                            key={`ghost-${id}`}
+                            style={{
+                                left: finalLeft, width: finalWidth, top, height,
+                                borderColor: ghostBlock.contrastColor,
+                                color: ghostBlock.contrastColor,
+                                backgroundColor: ghostBlock.isValid ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.1)'
+                            }}
+                            className="absolute z-50 border-2 border-dashed rounded-[2rem] pointer-events-none flex items-center justify-center backdrop-blur-[1px]"
+                        >
+                            {id === interaction.activeBlockId && (
+                                <div 
+                                    className="font-bold px-3 py-1 rounded-full text-xs backdrop-blur-sm shadow-sm transition-colors"
+                                    style={{ 
+                                        backgroundColor: ghostBlock.isValid ? 'rgba(255,255,255,0.9)' : '#EF4444', 
+                                        color: ghostBlock.isValid ? COLORS.brand.black : 'white'
+                                    }}
+                                >
+                                    {ghostBlock.isValid ? 'Soltar Aqui' : 'Inválido'}
+                                </div>
+                            )}
+                        </div>
+                     );
+                 });
+            })()}
+
+            {/* Ghost Block (Single/New Block) - Fallback */}
+            {ghostBlock && (!interaction || interaction.type !== 'DRAG') && (() => {
+                 let left = MARGIN_PX + (ghostBlock.position.colStart - 1) * (colWidth + GUTTER_PX);
+                 let width = (ghostBlock.position.colSpan * colWidth) + ((ghostBlock.position.colSpan - 1) * GUTTER_PX);
+                 let top = MARGIN_PX + (ghostBlock.position.rowStart - 1) * ROW_HEIGHT + (ROW_HEIGHT * 0.5);
+                 let height = ghostBlock.position.rowSpan * ROW_HEIGHT - ROW_HEIGHT;
+
+                 if (ghostBlock.parentBlockId) {
                     const parent = blocks.find(b => b.id === ghostBlock.parentBlockId);
                     if (parent) {
                         const parentLeft = MARGIN_PX + (parent.position.colStart - 1) * (colWidth + GUTTER_PX);
                         const parentWidth = (parent.position.colSpan * colWidth) + ((parent.position.colSpan - 1) * GUTTER_PX);
-                        const paddingX = ROW_HEIGHT * 0.5;
+                        const paddingX = GUTTER_PX; // Explicitly maintain Horizontal Padding
                         const innerWidth = parentWidth - (paddingX * 2);
                         const scale = innerWidth / parentWidth;
                         const relLeft = left - parentLeft;
@@ -1087,122 +1367,58 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                 return (
                     <div
                         style={{
-                            left,
-                            width,
-                            top,
-                            height,
+                            left, width, top, height,
                             borderColor: ghostBlock.contrastColor,
                             color: ghostBlock.contrastColor,
                             backgroundColor: ghostBlock.isValid ? 'rgba(255,255,255,0.1)' : 'rgba(239, 68, 68, 0.1)'
                         }}
-                        className="absolute z-50 border-2 border-dashed rounded-3xl pointer-events-none flex items-center justify-center backdrop-blur-[1px]"
+                        className="absolute z-50 border-2 border-dashed rounded-[2rem] pointer-events-none flex items-center justify-center backdrop-blur-[1px]"
                     >
-                        <div 
+                         <div 
                             className="font-bold px-3 py-1 rounded-full text-xs backdrop-blur-sm shadow-sm transition-colors"
                             style={{ 
                                 backgroundColor: ghostBlock.isValid ? 'rgba(255,255,255,0.9)' : '#EF4444', 
                                 color: ghostBlock.isValid ? COLORS.brand.black : 'white'
                             }}
                         >
-                            {ghostBlock.isValid ? 'Solte para agrupar' : 'Espaço Insuficiente'}
+                            {ghostBlock.isValid ? 'Soltar Aqui' : 'Inválido'}
                         </div>
                     </div>
                 );
             })()}
 
             {sortedBlocks.map((block) => {
+              // Hide if this specific block is part of the current drag interaction
+              const isBeingDragged = activeDragId === block.id || (interaction?.type === 'DRAG' && interaction.initialPositions[block.id]);
+              if (isBeingDragged) return null; 
+
               const isSelected = selectedBlockIds.includes(block.id);
               const isHero = block.type === BlockType.HERO;
               
               let left = MARGIN_PX + (block.position.colStart - 1) * (colWidth + GUTTER_PX);
               let width = (block.position.colSpan * colWidth) + ((block.position.colSpan - 1) * GUTTER_PX);
               
-              // --- NESTED CHILD RENDERING LOGIC ---
               if (block.parentBlockId) {
                   const parent = blocks.find(b => b.id === block.parentBlockId);
                   if (parent) {
                        const parentLeft = MARGIN_PX + (parent.position.colStart - 1) * (colWidth + GUTTER_PX);
                        const parentWidth = (parent.position.colSpan * colWidth) + ((parent.position.colSpan - 1) * GUTTER_PX);
-                       
-                       // Symmetric Padding for Children inside Hero
-                       const paddingX = ROW_HEIGHT * 0.5;
+                       const paddingX = GUTTER_PX; // Explicitly maintain Horizontal Padding
                        const innerWidth = parentWidth - (paddingX * 2);
                        const scale = innerWidth / parentWidth;
-                       
                        const relLeft = left - parentLeft;
-                       
                        left = parentLeft + paddingX + (relLeft * scale);
                        width = width * scale;
                   }
               }
               
+              // Vertical offset logic maintained (+ 0.5 ROW_HEIGHT for centering on lines)
               const top = MARGIN_PX + (block.position.rowStart - 1) * ROW_HEIGHT + (ROW_HEIGHT * 0.5); 
               const height = block.position.rowSpan * ROW_HEIGHT - ROW_HEIGHT;
 
               const textColor = getBestContrastingColor(block.color || '#FFFFFF', '#FFFFFF', '#000000');
               const mutedColor = textColor === '#FFFFFF' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.4)';
-
-              const hasChildren = blocks.some(b => b.parentBlockId === block.id) || (ghostBlock?.parentBlockId === block.id);
-
-              let contentPreview = null;
-              switch(block.type) {
-                  case BlockType.HERO:
-                      contentPreview = (
-                        <div className="w-full h-full flex flex-col p-6 opacity-40 relative">
-                            {!hasChildren && (
-                                <div className="h-8 w-2/3 mb-4 rounded-full" style={{ backgroundColor: textColor }} />
-                            )}
-                            {isSelected && (
-                                <div className="absolute inset-6 border-2 border-dashed border-current opacity-30 rounded-lg flex items-center justify-center">
-                                    <span className="text-[10px] uppercase font-mono">
-                                        {block.heroProperties?.stackDirection === 'vertical' ? 'Stack Vertical' : 'Stack Horizontal'}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                      );
-                      break;
-                  case BlockType.STATS:
-                      contentPreview = <div className="w-full h-full flex flex-col justify-between p-4"><div className="text-4xl font-bold" style={{ color: textColor }}>86%</div></div>;
-                      break;
-                  case BlockType.METRIC:
-                      contentPreview = <div className="w-full h-full flex flex-col justify-center items-center p-4 text-center"><Activity size={32} className="mb-2" style={{ color: textColor }} /></div>;
-                      break;
-                  case BlockType.IMAGE:
-                      contentPreview = (
-                          <div className="w-full h-full relative flex flex-col rounded-xl overflow-hidden pointer-events-auto">
-                              {block.content ? (
-                                   <div className="relative w-full h-full group/image">
-                                       <img src={block.content} alt="Block Media" className="w-full h-full object-cover" />
-                                       <button 
-                                           onMouseDown={e => e.stopPropagation()}
-                                           onClick={() => triggerImageUpload(block.id)}
-                                           className="absolute top-2 right-2 bg-white/80 hover:bg-white text-gray-800 p-1.5 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity shadow-sm"
-                                           title="Alterar Imagem"
-                                       >
-                                           <Edit2 size={14} />
-                                       </button>
-                                   </div>
-                              ) : (
-                                   <button 
-                                       onMouseDown={e => e.stopPropagation()}
-                                       onClick={() => triggerImageUpload(block.id)}
-                                       className="w-full h-full flex flex-col items-center justify-center bg-black/5 hover:bg-black/10 transition-colors text-gray-400 hover:text-brand-orange gap-2 border-2 border-dashed border-transparent hover:border-brand-orange/50 rounded-xl"
-                                   >
-                                       <ImageIcon size={32} />
-                                       <span className="text-xs font-medium">Adicionar Imagem</span>
-                                   </button>
-                              )}
-                          </div>
-                      );
-                      break;
-                  case BlockType.CHART:
-                       contentPreview = <div className="w-full h-full flex items-end gap-2 p-6 justify-center opacity-50"><BarChart2 size={32} style={{color: textColor}} /></div>;
-                       break;
-                  case BlockType.LIST:
-                      contentPreview = <div className="p-4 space-y-3 opacity-30"><div className="h-2 w-full rounded" style={{ backgroundColor: textColor }} /></div>;
-                      break;
-              }
+              const hasChildren = blocks.some(b => b.parentBlockId === block.id);
 
               return (
                 <motion.div
@@ -1217,48 +1433,51 @@ const GridCanvas: React.FC<GridCanvasProps> = ({
                     opacity: block.opacity ?? 1,
                     position: 'absolute',
                     color: textColor,
-                    zIndex: isHero ? (isSelected ? 10 : 5) : (isSelected ? 30 : 20)
+                    zIndex: isHero ? (isSelected ? 10 : 5) : (isSelected ? 30 : 20),
+                    boxShadow: isSelected 
+                        ? `0 0 0 2px ${COLORS.brand.orange}, 0 20px 30px -10px rgba(0,0,0,0.3)` 
+                        : '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' // Softer, blurrier shadow
                   }}
                   className={`
-                    rounded-3xl border group backdrop-blur-sm shadow-[0_20px_40px_rgba(0,0,0,0.1)]
-                    transition-shadow duration-200
-                    ${isSelected ? 'ring-2 ring-brand-orange border-brand-orange' : 'border-white/50'}
-                    ${isHero && !isSelected ? 'hover:border-gray-300' : ''}
+                    group rounded-[2rem] flex flex-col overflow-hidden transition-shadow
+                    ${isSelected ? 'ring-0' : 'hover:ring-2 ring-gray-200'}
                   `}
                 >
-                  {(!isHero || !hasChildren) && (
-                    <div className="absolute top-3 left-4 right-12 pointer-events-none truncate export-exclude-content z-20">
-                        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: mutedColor }}>{block.title}</h3>
-                    </div>
-                  )}
+                  {/* Drag Handle - Full Surface */}
                   
-                  {isSelected && selectedBlockIds.length === 1 && (
-                     <button
-                        className="absolute top-2 right-2 p-1.5 hover:bg-red-50 rounded-md z-40 ui-helper transition-colors"
-                        style={{ color: textColor === '#FFFFFF' ? '#ffaaaa' : '#ff0000' }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onSaveCheckpoint();
-                            onSelectBlocks([]);
-                            onUpdateBlocks(blocks.filter(b => b.id !== block.id));
-                        }}
-                     >
-                        <Trash2 size={14} />
-                     </button>
+                  {/* Resize Handles */}
+                  {isSelected && (
+                    <>
+                        <div 
+                            className="absolute right-0 bottom-0 p-1 cursor-se-resize hover:bg-black/10 rounded-tl-lg z-50"
+                            onMouseDown={(e) => handleInteractionStart(e, block.id, 'RESIZE')}
+                            onTouchStart={(e) => handleInteractionStart(e, block.id, 'RESIZE')}
+                        >
+                            <Scaling size={14} />
+                        </div>
+                    </>
                   )}
-                  
-                  {/* Content Layer - Pointer Events allowed for interactive children (like image upload button) */}
-                  <div className="absolute inset-0 mt-8 pointer-events-none export-exclude-content z-10">
-                      {contentPreview}
+
+                  <div className="flex-1 relative block-content-export-target">
+                      {renderBlockContent(block, isSelected, mutedColor, textColor)}
                   </div>
-                  
-                  <div
-                    className={`absolute bottom-0 right-0 w-6 h-6 cursor-se-resize z-30 flex items-center justify-center hover:text-brand-orange ui-helper ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                    style={{ color: mutedColor }}
-                    onMouseDown={(e) => handleInteractionStart(e, block.id, 'RESIZE')}
-                    onTouchStart={(e) => handleInteractionStart(e, block.id, 'RESIZE')}
-                  >
-                    <Scaling size={14} />
+
+                  {/* Header / Label */}
+                  <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start pointer-events-none z-20 block-header-wrapper">
+                      <div className="flex flex-col">
+                          <span className="text-xs font-bold uppercase tracking-wider opacity-70">{block.title}</span>
+                          <span className="text-[10px] opacity-50">
+                              {block.type === BlockType.HERO ? 'Hero Section' : `${block.position.colSpan}x${block.position.rowSpan}`}
+                          </span>
+                      </div>
+                      {isSelected && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); /* Handled by app */ }}
+                            className="pointer-events-auto p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition-colors"
+                          >
+                              <Trash2 size={14} />
+                          </button>
+                      )}
                   </div>
                 </motion.div>
               );

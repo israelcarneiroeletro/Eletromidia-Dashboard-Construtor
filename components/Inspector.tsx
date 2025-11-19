@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { DashboardBlock, BlockType, Resolution } from '../types';
 import { COLORS, RESOLUTIONS, COLUMN_OPTIONS, COMPONENT_PALETTE } from '../constants'; 
@@ -57,7 +56,7 @@ const Inspector: React.FC<InspectorProps> = ({
                         <button
                             key={res.id}
                             onClick={() => onResolutionChange(res)}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm transition-all ${
+                            className={`flex items-center gap-3 px-3 py-2 rounded-2xl border text-sm transition-all ${
                                 currentResolution.id === res.id 
                                 ? 'bg-brand-orange/5 border-brand-orange text-brand-orange' 
                                 : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -74,12 +73,12 @@ const Inspector: React.FC<InspectorProps> = ({
                  <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     <Columns size={14} /> Colunas do Grid
                  </label>
-                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-2xl border border-gray-200">
                     {COLUMN_OPTIONS.map(cols => (
                         <button 
                             key={cols} 
                             onClick={() => onGridColumnsChange(cols)}
-                            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            className={`flex-1 py-1.5 text-xs font-medium rounded-xl transition-all ${
                                 gridColumns === cols 
                                 ? 'bg-white text-gray-900 shadow-sm border border-gray-100' 
                                 : 'text-gray-500 hover:text-gray-700'
@@ -93,9 +92,24 @@ const Inspector: React.FC<InspectorProps> = ({
 
              <div>
                  <label className="block text-sm font-medium text-gray-700 mb-2">Cor de Fundo</label>
+                 <div className="flex flex-wrap gap-2 mb-3">
+                    {Object.entries(COLORS.brand).concat(Object.entries(COLORS.accent)).concat([['light-gray', '#F3F4F6'], ['dark-gray', '#1A1A1A']]).map(([name, hex]) => (
+                        <button
+                            key={name}
+                            onClick={() => {
+                                onSaveCheckpoint();
+                                onUpdateCanvasBackground(hex);
+                            }}
+                            className={`w-6 h-6 rounded-full border transition-all ${canvasBackgroundColor.toLowerCase() === hex.toLowerCase() ? 'border-gray-900 scale-110' : 'border-gray-200 hover:scale-105'}`}
+                            style={{ backgroundColor: hex }}
+                            title={name}
+                        />
+                    ))}
+                 </div>
+
                  <div className="flex items-center gap-3">
                      <div 
-                        className="relative w-10 h-10 rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-pointer"
+                        className="relative w-10 h-10 rounded-2xl overflow-hidden border border-gray-200 shadow-sm cursor-pointer"
                         onClick={onSaveCheckpoint}
                      >
                         <input 
@@ -110,7 +124,7 @@ const Inspector: React.FC<InspectorProps> = ({
                          value={canvasBackgroundColor}
                          onFocus={onSaveCheckpoint}
                          onChange={(e) => onUpdateCanvasBackground(e.target.value)}
-                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm uppercase font-mono"
+                         className="flex-1 px-3 py-2 border border-gray-300 rounded-2xl text-sm uppercase font-mono"
                          maxLength={7}
                      />
                  </div>
@@ -186,7 +200,7 @@ const Inspector: React.FC<InspectorProps> = ({
       <div className="hidden lg:flex p-6 border-b border-gray-100 justify-between items-center">
         <div className="flex items-center gap-3 mb-1">
             {isMulti ? (
-                <div className="bg-brand-orange/10 p-2 rounded-lg text-brand-orange">
+                <div className="bg-brand-orange/10 p-2 rounded-2xl text-brand-orange">
                     <Layers size={20} />
                 </div>
             ) : (
@@ -212,13 +226,13 @@ const Inspector: React.FC<InspectorProps> = ({
         <div className="grid grid-cols-2 gap-2">
              <button 
                 onClick={onDuplicateBlocks}
-                className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center justify-center gap-2 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl text-sm font-medium transition-colors"
              >
                  <Copy size={16} /> Duplicar
              </button>
              <button 
                 onClick={onDeleteBlocks}
-                className="flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-sm font-medium transition-colors"
              >
                  <Trash2 size={16} /> Excluir
              </button>
@@ -226,7 +240,7 @@ const Inspector: React.FC<InspectorProps> = ({
 
         {/* Hero Properties */}
         {isHero && (
-            <section className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <section className="bg-blue-50 p-4 rounded-3xl border border-blue-100">
                  <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <LayoutTemplate size={14} /> Configuração Hero
                  </h3>
@@ -234,10 +248,10 @@ const Inspector: React.FC<InspectorProps> = ({
                  <div className="space-y-4">
                      <div>
                          <label className="block text-xs font-medium text-blue-800 mb-2">Direção do Stack</label>
-                         <div className="flex bg-white rounded-lg border border-blue-200 p-1">
+                         <div className="flex bg-white rounded-2xl border border-blue-200 p-1">
                              <button
                                 onClick={() => onUpdateBlocks({ heroProperties: { ...firstBlock.heroProperties, stackDirection: 'horizontal' } })}
-                                className={`flex-1 py-1.5 px-2 rounded text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1 transition-all ${
                                     firstBlock.heroProperties?.stackDirection !== 'vertical' // Default Horizontal
                                     ? 'bg-blue-100 text-blue-700 shadow-sm' 
                                     : 'text-gray-500 hover:bg-gray-50'
@@ -247,7 +261,7 @@ const Inspector: React.FC<InspectorProps> = ({
                              </button>
                              <button
                                 onClick={() => onUpdateBlocks({ heroProperties: { ...firstBlock.heroProperties, stackDirection: 'vertical' } })}
-                                className={`flex-1 py-1.5 px-2 rounded text-xs font-medium flex items-center justify-center gap-1 transition-all ${
+                                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1 transition-all ${
                                     firstBlock.heroProperties?.stackDirection === 'vertical'
                                     ? 'bg-blue-100 text-blue-700 shadow-sm' 
                                     : 'text-gray-500 hover:bg-gray-50'
@@ -258,7 +272,7 @@ const Inspector: React.FC<InspectorProps> = ({
                          </div>
                      </div>
                      
-                     <div className="text-xs text-blue-600/80 bg-blue-100/50 p-2 rounded border border-blue-200">
+                     <div className="text-xs text-blue-600/80 bg-blue-100/50 p-2 rounded-2xl border border-blue-200">
                         <strong>Capacidade:</strong><br/>
                         ~{capacityHor} blocos (Hor) ou ~{capacityVert} blocos (Vert)
                      </div>
@@ -280,7 +294,7 @@ const Inspector: React.FC<InspectorProps> = ({
                 placeholder={commonTitle === 'mixed' ? 'Valores mistos' : ''}
                 onFocus={onSaveCheckpoint}
                 onChange={(e) => onUpdateBlocks({ title: e.target.value })}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-orange focus:border-brand-orange outline-none text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl focus:ring-2 focus:ring-brand-orange focus:border-brand-orange outline-none text-sm"
               />
             </div>
             <div>
@@ -289,7 +303,7 @@ const Inspector: React.FC<InspectorProps> = ({
                     value={commonType === 'mixed' ? '' : commonType}
                     onFocus={onSaveCheckpoint}
                     onChange={(e) => onUpdateBlocks({ type: e.target.value as BlockType })}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl text-sm"
                 >
                    {commonType === 'mixed' && <option value="">(Vários)</option>}
                    {Object.values(BlockType).map(t => (
@@ -316,7 +330,7 @@ const Inspector: React.FC<InspectorProps> = ({
                 placeholder={commonColStart === 'mixed' ? '-' : ''}
                 onFocus={onSaveCheckpoint}
                 onChange={(e) => onUpdateBlocks({ position: { colStart: parseInt(e.target.value) } as any })}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl text-sm"
               />
             </div>
             <div>
@@ -329,7 +343,7 @@ const Inspector: React.FC<InspectorProps> = ({
                 placeholder={commonColSpan === 'mixed' ? '-' : ''}
                 onFocus={onSaveCheckpoint}
                 onChange={(e) => onUpdateBlocks({ position: { colSpan: parseInt(e.target.value) } as any })}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl text-sm"
               />
             </div>
             <div>
@@ -341,7 +355,7 @@ const Inspector: React.FC<InspectorProps> = ({
                 placeholder={commonRowStart === 'mixed' ? '-' : ''}
                 onFocus={onSaveCheckpoint}
                 onChange={(e) => onUpdateBlocks({ position: { rowStart: parseInt(e.target.value) } as any })}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl text-sm"
               />
             </div>
             <div>
@@ -353,7 +367,7 @@ const Inspector: React.FC<InspectorProps> = ({
                 placeholder={commonRowSpan === 'mixed' ? '-' : ''}
                 onFocus={onSaveCheckpoint}
                 onChange={(e) => onUpdateBlocks({ position: { rowSpan: parseInt(e.target.value) } as any })}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-2xl text-sm"
               />
             </div>
           </div>
@@ -413,7 +427,7 @@ const Inspector: React.FC<InspectorProps> = ({
                      <label className="block text-xs text-gray-500 mb-2">Cor Personalizada</label>
                      <div className="flex items-center gap-3">
                          <div 
-                            className="relative w-10 h-10 rounded overflow-hidden border border-gray-200 shadow-sm"
+                            className="relative w-10 h-10 rounded-2xl overflow-hidden border border-gray-200 shadow-sm"
                             onClick={onSaveCheckpoint}
                          >
                             <input 
@@ -428,7 +442,7 @@ const Inspector: React.FC<InspectorProps> = ({
                              value={commonColor === 'mixed' ? 'MISTO' : commonColor}
                              onFocus={onSaveCheckpoint}
                              onChange={(e) => onUpdateBlocks({ color: e.target.value })}
-                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm uppercase font-mono"
+                             className="flex-1 px-3 py-2 border border-gray-300 rounded-2xl text-sm uppercase font-mono"
                              maxLength={7}
                              placeholder="#FFFFFF"
                          />

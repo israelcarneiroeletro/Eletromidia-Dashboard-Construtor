@@ -5,6 +5,19 @@ import { BlockType, DashboardBlock } from "../types";
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
+// Helper to check if block A fully contains block B
+const containsBlock = (parent: DashboardBlock, child: DashboardBlock): boolean => {
+    const p = parent.position;
+    const c = child.position;
+    // Check if child is strictly inside parent boundaries
+    return (
+        c.colStart >= p.colStart &&
+        c.colStart + c.colSpan <= p.colStart + p.colSpan &&
+        c.rowStart >= p.rowStart &&
+        c.rowStart + c.rowSpan <= p.rowStart + p.rowSpan
+    );
+};
+
 export const reconstructLayoutFromImage = async (base64Image: string): Promise<DashboardBlock[]> => {
   if (!apiKey) {
     console.error("API Key is missing");
@@ -22,56 +35,37 @@ export const reconstructLayoutFromImage = async (base64Image: string): Promise<D
         type: {
           type: Type.STRING,
           enum: Object.values(BlockType),
-          description: "The specific Eletromidia DS Block Type. MUST match the enum values exactly (e.g. 'stats_tile', 'hero_section'). Do NOT use 'card' or generic names."
+          description: "The block type. Use 'hero_section' for ANY container, colored section, or background area that groups other items."
         },
-        title: {
-          type: Type.STRING,
-          description: "A short title describing the block in Portuguese (PT-BR)."
-        },
-        colStart: {
-          type: Type.INTEGER,
-          description: "Starting column (1-12)."
-        },
-        colSpan: {
-          type: Type.INTEGER,
-          description: "Width in columns (1-12). Sum of colStart + colSpan must be <= 13."
-        },
-        rowStart: {
-          type: Type.INTEGER,
-          description: "Approximate starting row."
-        },
-        rowSpan: {
-          type: Type.INTEGER,
-          description: "Height in grid rows (usually 4-10 rows)."
-        },
-        suggestedColor: {
-            type: Type.STRING,
-            description: "Brand hex color."
-        }
+        title: { type: Type.STRING },
+        colStart: { type: Type.INTEGER },
+        colSpan: { type: Type.INTEGER },
+        rowStart: { type: Type.INTEGER },
+        rowSpan: { type: Type.INTEGER },
+        suggestedColor: { type: Type.STRING }
       },
       required: ["type", "colStart", "colSpan", "rowStart", "rowSpan"],
     },
   };
 
   const prompt = `
-    Analise este screenshot de dashboard e reconstrua o layout usando os blocos do Design System da Eletromidia em um grid de 12 colunas.
+    Analise este screenshot de dashboard e reconstrua o layout para o Design System da Eletromidia (Grid 12 colunas).
     
-    Siga estritamente estes tipos de bloco:
-    - 'hero_section': Cabeçalhos grandes ou áreas principais.
-    - 'stats_tile': Pequenos cards com números/porcentagens.
-    - 'metric_card': Blocos de KPI.
-    - 'list_tile': Listas ou tabelas.
-    - 'analytics_panel': Gráficos ou painéis de dados.
-    - 'image_card': Mídia ou placeholders de imagem.
+    CRITICAL - HIERARQUIA E NESTING (HERO SECTIONS):
+    1. **Identificação de Containers:** Qualquer área de fundo colorido, card agrupador ou seção visualmente distinta DEVE ser um 'hero_section'.
+    2. **Conteúdo Aninhado:** Elementos (gráficos, métricas, textos) que estão visualmente *dentro* dessa área colorida DEVEM ser blocos independentes.
+    3. **Coordenadas:** As coordenadas (colStart, rowStart) dos elementos filhos DEVEM estar matematicamente dentro das coordenadas do 'hero_section' pai.
+    4. **Padding:** O Hero Section deve ser largo o suficiente para conter os filhos com margem.
 
-    Regras:
-    1. NÃO use 'cards' genéricos. Mapeie cada elemento para o tipo de bloco mais próximo acima.
-    2. Alinhe os elementos ao grid de 12 colunas.
-    3. Garanta que não haja sobreposições horizontais.
-    4. Use alturas de linha aproximadas (1 linha = ~30px).
-    5. Gere títulos e textos em Português do Brasil.
-    
-    Retorne um array JSON de blocos.
+    Tipos de Bloco:
+    - 'hero_section': Container Principal, Fundo Colorido, Área de Agrupamento.
+    - 'stats_tile': KPI, Número em destaque.
+    - 'metric_card': Card com ícone e valor.
+    - 'list_tile': Listas de texto ou tabelas.
+    - 'analytics_panel': Gráficos (Barras, Linhas, Pizza) e visualizações de dados.
+    - 'image_card': Imagens, Mídia, Vídeo.
+
+    Gere um JSON plano (flat array) com todos os blocos. O pós-processamento cuidará do aninhamento (parentBlockId) baseado na sobreposição espacial.
   `;
 
   try {
@@ -80,18 +74,13 @@ export const reconstructLayoutFromImage = async (base64Image: string): Promise<D
       contents: {
         parts: [
             { text: prompt },
-            {
-                inlineData: {
-                    mimeType: "image/png",
-                    data: base64Image
-                }
-            }
+            { inlineData: { mimeType: "image/png", data: base64Image } }
         ]
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        systemInstruction: "Você é um engenheiro de UI especialista em layouts do Design System da Eletromidia. Você é preciso com coordenadas de grid e fala Português do Brasil.",
+        systemInstruction: "Você é um especialista em reconstrução de UI. Você prioriza a estrutura hierárquica de containers e elementos filhos.",
       }
     });
 
@@ -100,11 +89,11 @@ export const reconstructLayoutFromImage = async (base64Image: string): Promise<D
 
     const parsed = JSON.parse(text);
     
-    // Map raw response to our internal model with IDs
-    return parsed.map((item: any) => ({
+    // 1. Map to DashboardBlock objects
+    let blocks: DashboardBlock[] = parsed.map((item: any) => ({
         id: `block-${crypto.randomUUID()}`,
         type: item.type,
-        title: item.title || "Bloco Reconstruído",
+        title: item.title || "Bloco IA",
         position: {
             colStart: Math.max(1, Math.min(12, item.colStart)),
             colSpan: Math.max(1, Math.min(12, item.colSpan)),
@@ -114,6 +103,44 @@ export const reconstructLayoutFromImage = async (base64Image: string): Promise<D
         color: item.suggestedColor
     }));
 
+    // 2. Post-processing: Detect Hierarchy
+    // Sort by area descending (Largest blocks are potential parents)
+    blocks.sort((a, b) => (b.position.colSpan * b.position.rowSpan) - (a.position.colSpan * a.position.rowSpan));
+
+    // Use a secure iteration method to modify relationships
+    const processedBlocks = [...blocks];
+
+    for (let i = 0; i < processedBlocks.length; i++) {
+        const parent = processedBlocks[i];
+        
+        // Heuristic: Parents must be reasonably large
+        const isLargeEnough = parent.position.colSpan >= 3 && parent.position.rowSpan >= 3;
+        const isHero = parent.type === BlockType.HERO;
+
+        if (isLargeEnough || isHero) {
+            for (let j = 0; j < processedBlocks.length; j++) {
+                if (i === j) continue;
+                const child = processedBlocks[j];
+                
+                // If child not yet assigned and contained in parent
+                if (!child.parentBlockId && containsBlock(parent, child)) {
+                    // Assign parent
+                    child.parentBlockId = parent.id;
+                    
+                    // Force parent to be HERO if it caught children (auto-correction)
+                    if (parent.type !== BlockType.HERO) {
+                        parent.type = BlockType.HERO;
+                        parent.heroProperties = { stackDirection: 'horizontal' };
+                    } else if (!parent.heroProperties) {
+                        parent.heroProperties = { stackDirection: 'horizontal' };
+                    }
+                }
+            }
+        }
+    }
+
+    return processedBlocks;
+
   } catch (error) {
     console.error("Error reconstructing layout:", error);
     throw error;
@@ -122,20 +149,12 @@ export const reconstructLayoutFromImage = async (base64Image: string): Promise<D
 
 export const getDesignSuggestions = async (currentLayout: DashboardBlock[]): Promise<string> => {
     if (!apiKey) return "Chave de API faltando.";
-    
     const model = "gemini-2.5-flash-lite";
-    
     try {
         const response = await ai.models.generateContent({
             model,
-            contents: `
-                Revise esta configuração de layout JSON para um dashboard e forneça 3 sugestões concisas sobre como melhorar o alinhamento, hierarquia ou espaço em branco com base nos princípios de Design System (Grid, regra de espaçamento de 8px). Responda em Português do Brasil.
-                Layout: ${JSON.stringify(currentLayout.map(c => ({ type: c.type, pos: c.position })))}
-            `
+            contents: `Sugira melhorias de design para este layout JSON (Grid 12). Foco em alinhamento e consistência: ${JSON.stringify(currentLayout.map(c => ({ t: c.type, p: c.position })))}`
         });
-        return response.text || "Nenhuma sugestão disponível.";
-    } catch (e) {
-        console.error(e);
-        return "Não foi possível obter sugestões.";
-    }
+        return response.text || "Sem sugestões.";
+    } catch (e) { return "Erro ao obter sugestões."; }
 }
